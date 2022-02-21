@@ -1,4 +1,4 @@
-use steam_audio::prelude::*;
+use steam_audio::{prelude::*, Orientation};
 
 use bevy::{
     prelude::*,
@@ -13,7 +13,92 @@ pub struct SpatialAudioSource {
     pub settings: SourceSettings,
 }
 
-pub struct StaticAudioMesh {
+pub struct SpatialAudioPlugin;
+
+impl Plugin for SpatialAudioPlugin {
+    fn build(&self, app: &mut App) {
+        let audio_settings = AudioSettings::default();
+
+        app.insert_resource(ContextSettings::default())
+            .insert_resource(HRTFSettings::default())
+            .insert_resource(SimulationSettings::from_audio_settings(&audio_settings))
+            .insert_resource(audio_settings);
+    }
+}
+
+pub fn context_update(mut commands: Commands, settings: Res<ContextSettings>) {
+    if settings.is_changed() {
+        match Context::new(&*settings) {
+            Ok(context) => {
+                commands.insert_resource(context);
+            }
+            _ => {}
+        }
+    }
+}
+
+pub fn hrtf_update(
+    mut commands: Commands,
+    context: Res<Context>,
+    audio_settings: Res<AudioSettings>,
+    hrtf_settings: Res<HRTFSettings>,
+) {
+    if context.is_changed() || audio_settings.is_changed() || hrtf_settings.is_changed() {
+        match HRTF::new(&context, &audio_settings, &hrtf_settings) {
+            Ok(hrtf) => {
+                commands.insert_resource(hrtf);
+            }
+            _ => {}
+        };
+    }
+}
+
+pub fn simulation_update(
+    mut commands: Commands,
+    context: Res<Context>,
+    simulation_settings: Res<SimulationSettings>,
+) {
+    if context.is_changed() || simulation_settings.is_changed() {
+        match Simulator::new(&*context, &simulation_settings) {
+            Ok(simulator) => {
+                commands.insert_resource(simulator);
+            }
+            _ => {}
+        }
+    }
+}
+
+pub struct Listener(Entity);
+
+pub fn listener_update(
+    simulator: Res<Simulator>,
+    listener: Option<Res<Listener>>,
+    query: Query<&GlobalTransform>,
+) {
+    if let Some(listener) = listener {
+        match query.get(listener.0) {
+            Ok(global) => {
+                let flags = SimulationFlags::all();
+                let orientation = Orientation {
+                    origin: global.translation,
+                    right: global.right(),
+                    up: global.up(),
+                    ahead: global.forward(),
+                };
+
+                let shared_inputs = SimulationSharedInputs {
+                    listener: orientation,
+                    ..Default::default()
+                };
+
+                simulator.set_shared_inputs(flags, &shared_inputs);
+            }
+            _ => {}
+        }
+    }
+}
+
+pub struct AudioMesh {
     pub vertices: Vec<Vec3>,
     pub triangles: Vec<[u32; 3]>,
     pub materials: Vec<steam_audio::prelude::Material>,
@@ -26,7 +111,7 @@ pub enum AudioMeshError {
     NonTrianglePrimitiveTopology(PrimitiveTopology),
 }
 
-impl TryFrom<Mesh> for StaticAudioMesh {
+impl TryFrom<Mesh> for AudioMesh {
     type Error = AudioMeshError;
     fn try_from(mesh: Mesh) -> Result<Self, Self::Error> {
         let triangles = match mesh.indices() {
@@ -48,13 +133,13 @@ impl TryFrom<Mesh> for StaticAudioMesh {
                             .windows(3)
                             .map(|indices| [indices[0], indices[1], indices[2]])
                             .collect();
-                        
+
                         for (index, indices) in indices.iter_mut().enumerate() {
                             if (index + 1) % 2 == 0 {
                                 *indices = [indices[1], indices[0], indices[2]];
                             }
                         }
-                        
+
                         indices
                     }
                     topology => return Err(AudioMeshError::NonTrianglePrimitiveTopology(topology)),

@@ -2784,8 +2784,6 @@ checksum = "213701ba3370744dcd1a12960caa4843b3d68b4d1c0a5d575e0d65b2ee9d16c0"
 [[package]]
 name = "steam-audio"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c5ffff7869c877f4bbf9d479a32a6d2fc4a8b744fb70d933299b3c821986611"
 dependencies = [
  "bitflags",
  "glam",

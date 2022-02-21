@@ -15,3 +15,6 @@ license-file = "LICENSE.md"
 [dependencies]
 bevy = { version = "0.6.1" }
 steam-audio = { version = "0.3" }
+
+[patch.crates-io]
+steam-audio = { path = "../steam-audio-rs/steam-audio" }
