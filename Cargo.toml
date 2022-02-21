@@ -3,7 +3,7 @@ name = "bevy-steam-audio"
 version = "0.1.0"
 edition = "2021"
 authors = ["Connor McCluskey <conmcclusk@gmail.com>"]
-description = "Rust bindings for Valve Software's binaural audio rendering library."
+description = "Bevy Integration for Valve's spatial audio library"
 repository = "https://github.com/aceeri/bevy-steam-audio.git"
 readme = "README.md"
 keywords = ["steam", "audio", "vr", "binaural", "gamedev"]
@@ -13,4 +13,5 @@ license-file = "LICENSE.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-steam-audio = { path = "../steam-audio-rs/steam-audio" }
+bevy = { version = "0.6.1" }
+steam-audio = { version = "0.3" }
