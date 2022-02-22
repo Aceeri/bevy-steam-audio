@@ -18,11 +18,22 @@ pub struct SpatialAudioPlugin;
 impl Plugin for SpatialAudioPlugin {
     fn build(&self, app: &mut App) {
         let audio_settings = AudioSettings::default();
+        let context_settings = ContextSettings::default();
+        let hrtf_settings = HRTFSettings::default();
+        let simulation_settings = SimulationSettings::from_audio_settings(&audio_settings);
 
-        app.insert_resource(ContextSettings::default())
-            .insert_resource(HRTFSettings::default())
-            .insert_resource(SimulationSettings::from_audio_settings(&audio_settings))
-            .insert_resource(audio_settings);
+        let context = Context::new(&context_settings).expect("could not build steam audio context");
+        let hrtf = HRTF::new(&context, &audio_settings, &hrtf_settings).expect("could not build steam audio hrtf");
+        let simulator = Simulator::new(&context, &simulation_settings).expect("could not build steam audio simulation");
+
+        app
+            .insert_resource(audio_settings)
+            .insert_resource(context_settings)
+            .insert_resource(hrtf_settings)
+            .insert_resource(simulation_settings)
+            .insert_resource(context)
+            .insert_resource(hrtf)
+            .insert_resource(simulator);
     }
 }
 
@@ -68,7 +79,7 @@ pub fn simulation_update(
     }
 }
 
-pub struct Listener(Entity);
+pub struct Listener(pub Entity);
 
 pub fn listener_update(
     simulator: Res<Simulator>,

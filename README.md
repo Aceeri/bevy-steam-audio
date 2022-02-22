@@ -9,3 +9,6 @@
 [dependencies]
 bevy-steam-audio = "0.1.0"
 ```
+
+You also need to add the phonon.dll to your binary as it is dynamically linked, you can get a download for the latest version here:
+https://valvesoftware.github.io/steam-audio/downloads.html
