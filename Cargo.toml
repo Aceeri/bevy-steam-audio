@@ -13,8 +13,9 @@ license-file = "LICENSE.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bevy = { version = "0.6.1" }
+bevy = { version = "0.11.2" }
 steam-audio = { version = "0.3" }
+glam = "0.20.5"
 
 [patch.crates-io]
 steam-audio = { path = "../steam-audio-rs/steam-audio" }

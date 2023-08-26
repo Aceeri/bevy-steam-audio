@@ -8,9 +8,22 @@ use bevy::{
     },
 };
 
-#[derive(Component, Debug)]
-pub struct SpatialAudioSource {
-    pub settings: SourceSettings,
+use glam::Vec3;
+
+// #[derive(Component, Debug)]
+// pub struct SpatialAudioSource {
+//     pub settings: SourceSettings,
+// }
+
+#[derive(Resource)]
+pub struct SpatialAudioSettings {
+    audio_settings: AudioSettings,
+    context_settings: ContextSettings,
+    hrtf_settings: HRTFSettings,
+    simulation_settings: SimulationSettings,
+    context: Context,
+    hrtf: HRTF,
+    simulator: Simulator,
 }
 
 pub struct SpatialAudioPlugin;
@@ -28,85 +41,89 @@ impl Plugin for SpatialAudioPlugin {
         let simulator = Simulator::new(&context, &simulation_settings)
             .expect("could not build steam audio simulation");
 
-        app.insert_resource(audio_settings)
-            .insert_resource(context_settings)
-            .insert_resource(hrtf_settings)
-            .insert_resource(simulation_settings)
-            .insert_resource(context)
-            .insert_resource(hrtf)
-            .insert_resource(simulator);
+        app.insert_resource(SpatialAudioSettings {
+            audio_settings,
+            context_settings,
+            hrtf_settings,
+            simulation_settings,
+            context,
+            hrtf,
+            simulator,
+        });
     }
 }
 
-pub fn context_update(mut commands: Commands, settings: Res<ContextSettings>) {
-    if settings.is_changed() {
-        match Context::new(&*settings) {
-            Ok(context) => {
-                commands.insert_resource(context);
-            }
-            _ => {}
-        }
-    }
+// pub fn context_update(mut commands: Commands, settings: Res<ContextSettings>) {
+//     if settings.is_changed() {
+//         match Context::new(&*settings) {
+//             Ok(context) => {
+//                 commands.insert_resource(context);
+//             }
+//             _ => {}
+//         }
+//     }
+// }
+
+// pub fn hrtf_update(
+//     mut commands: Commands,
+//     context: Res<Context>,
+//     audio_settings: Res<AudioSettings>,
+//     hrtf_settings: Res<HRTFSettings>,
+// ) {
+//     if context.is_changed() || audio_settings.is_changed() || hrtf_settings.is_changed() {
+//         match HRTF::new(&context, &audio_settings, &hrtf_settings) {
+//             Ok(hrtf) => {
+//                 commands.insert_resource(hrtf);
+//             }
+//             _ => {}
+//         };
+//     }
+// }
+
+// pub fn simulation_update(
+//     mut commands: Commands,
+//     context: Res<Context>,
+//     simulation_settings: Res<SimulationSettings>,
+// ) {
+//     if context.is_changed() || simulation_settings.is_changed() {
+//         match Simulator::new(&*context, &simulation_settings) {
+//             Ok(simulator) => {
+//                 commands.insert_resource(simulator);
+//             }
+//             _ => {}
+//         }
+//     }
+// }
+
+// Todo: Need to get rid of this...
+fn glam_vec(input: bevy::prelude::Vec3) -> glam::Vec3 {
+    glam::Vec3::new(input.x, input.y, input.z)
 }
 
-pub fn hrtf_update(
-    mut commands: Commands,
-    context: Res<Context>,
-    audio_settings: Res<AudioSettings>,
-    hrtf_settings: Res<HRTFSettings>,
-) {
-    if context.is_changed() || audio_settings.is_changed() || hrtf_settings.is_changed() {
-        match HRTF::new(&context, &audio_settings, &hrtf_settings) {
-            Ok(hrtf) => {
-                commands.insert_resource(hrtf);
-            }
-            _ => {}
-        };
-    }
-}
-
-pub fn simulation_update(
-    mut commands: Commands,
-    context: Res<Context>,
-    simulation_settings: Res<SimulationSettings>,
-) {
-    if context.is_changed() || simulation_settings.is_changed() {
-        match Simulator::new(&*context, &simulation_settings) {
-            Ok(simulator) => {
-                commands.insert_resource(simulator);
-            }
-            _ => {}
-        }
-    }
-}
-
-pub struct Listener(pub Entity);
+#[derive(Component)]
+pub struct Listener;
 
 pub fn listener_update(
-    simulator: Res<Simulator>,
-    listener: Option<Res<Listener>>,
-    query: Query<&GlobalTransform>,
+    audio_resource: Res<SpatialAudioSettings>,
+    query: Query<(&GlobalTransform, &Listener)>,
 ) {
-    if let Some(listener) = listener {
-        match query.get(listener.0) {
-            Ok(global) => {
-                let flags = SimulationFlags::all();
-                let orientation = Orientation {
-                    origin: global.translation,
-                    right: global.right(),
-                    up: global.up(),
-                    ahead: global.forward(),
-                };
+    for (transform, listener_component) in query.iter() {
+        let flags = SimulationFlags::all();
+        let orientation = Orientation {
+            origin: glam_vec(transform.translation()),
+            right: glam_vec(transform.right()),
+            up: glam_vec(transform.up()),
+            ahead: glam_vec(transform.forward()),
+        };
 
-                let shared_inputs = SimulationSharedInputs {
-                    listener: orientation,
-                    ..Default::default()
-                };
+        let shared_inputs = SimulationSharedInputs {
+            listener: orientation,
+            ..Default::default()
+        };
 
-                simulator.set_shared_inputs(flags, &shared_inputs);
-            }
-            _ => {}
-        }
+        audio_resource
+            .simulator
+            .set_shared_inputs(flags, &shared_inputs);
     }
 }
 
