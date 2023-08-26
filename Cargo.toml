@@ -18,3 +18,7 @@ steam-audio = { version = "0.3" }
 
 [patch.crates-io]
 steam-audio = { path = "../steam-audio-rs/steam-audio" }
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
