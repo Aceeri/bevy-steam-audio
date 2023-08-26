@@ -1,4 +1,3 @@
-
 use bevy_steam_audio::prelude::*;
 
 use bevy::prelude::*;
@@ -13,7 +12,8 @@ fn main() {
 }
 
 fn setup_listener(mut commands: Commands) {
-    let listener = commands.spawn()
+    let listener = commands
+        .spawn()
         .insert(Name::new("listener"))
         .insert(GlobalTransform::default())
         .insert(Transform::default())
@@ -22,6 +22,4 @@ fn setup_listener(mut commands: Commands) {
     commands.insert_resource(Listener(listener));
 }
 
-fn setup_sources(mut commands: Commands) {
-
-}
+fn setup_sources(mut commands: Commands) {}

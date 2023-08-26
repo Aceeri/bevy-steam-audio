@@ -23,11 +23,12 @@ impl Plugin for SpatialAudioPlugin {
         let simulation_settings = SimulationSettings::from_audio_settings(&audio_settings);
 
         let context = Context::new(&context_settings).expect("could not build steam audio context");
-        let hrtf = HRTF::new(&context, &audio_settings, &hrtf_settings).expect("could not build steam audio hrtf");
-        let simulator = Simulator::new(&context, &simulation_settings).expect("could not build steam audio simulation");
+        let hrtf = HRTF::new(&context, &audio_settings, &hrtf_settings)
+            .expect("could not build steam audio hrtf");
+        let simulator = Simulator::new(&context, &simulation_settings)
+            .expect("could not build steam audio simulation");
 
-        app
-            .insert_resource(audio_settings)
+        app.insert_resource(audio_settings)
             .insert_resource(context_settings)
             .insert_resource(hrtf_settings)
             .insert_resource(simulation_settings)
