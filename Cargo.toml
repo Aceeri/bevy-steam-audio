@@ -16,6 +16,8 @@ license-file = "LICENSE.md"
 bevy = { version = "0.11.2" }
 steam-audio = { version = "0.3" }
 glam = "0.20.5"
+rodio = "0.15.0"
+itertools = "0.11.0"
 
 [patch.crates-io]
 steam-audio = { path = "../steam-audio-rs/steam-audio" }

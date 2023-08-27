@@ -15,15 +15,16 @@ use glam::Vec3;
 //     pub settings: SourceSettings,
 // }
 
+// Todo implement default
 #[derive(Resource)]
 pub struct SpatialAudioSettings {
-    audio_settings: AudioSettings,
-    context_settings: ContextSettings,
-    hrtf_settings: HRTFSettings,
-    simulation_settings: SimulationSettings,
-    context: Context,
-    hrtf: HRTF,
-    simulator: Simulator,
+    pub audio_settings: AudioSettings,
+    pub context_settings: ContextSettings,
+    pub hrtf_settings: HRTFSettings,
+    pub simulation_settings: SimulationSettings,
+    pub context: Context,
+    pub hrtf: HRTF,
+    pub simulator: Simulator,
 }
 
 pub struct SpatialAudioPlugin;
