@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 use bevy::ecs::event::ManualEventReader;
 use bevy_steam_audio::source::SpatialAudioSettings;
@@ -22,6 +23,7 @@ use steam_audio::interleave;
 struct SineAudio {
     // Reference to data // not using atm
     decoder: Option<f32>,
+    direction: Arc<Mutex<Vec3>>,
 }
 // This decoder is responsible for playing the audio,
 // and so stores data about the audio being played.
@@ -37,11 +39,12 @@ struct SineDecoder {
     binaural_effect: BinauralEffect,
     settings: SpatialAudioSettings,
     blocks_played: u32,
+    direction: Arc<Mutex<Vec3>>,
 }
 
 impl SineDecoder {
     // new(mut data)
-    fn new() -> Self {
+    fn new(direction: Arc<Mutex<Vec3>>) -> Self {
         // Create reader
         let file = std::fs::File::open("assets/eduardo.ogg").unwrap();
         let dec = rodio::Decoder::new(file).unwrap();
@@ -88,6 +91,7 @@ impl SineDecoder {
                 simulator,
             },
             blocks_played: 0,
+            direction,
         }
     }
 }
@@ -148,6 +152,8 @@ impl Iterator for SineDecoder {
 
             // todo: len() can be determined at creation
             if input_buffer.push_source(&mut self.decoder) {
+                let dist = self.direction.lock().unwrap();
+                println!("DistANCE: {}", *dist);
                 let time =
                     (self.blocks_played as f32 / self.current_block1.len() as f32) * std::f32::consts::TAU * 15.0;
 
@@ -193,36 +199,29 @@ impl Decodable for SineAudio {
     type DecoderItem = <SineDecoder as Iterator>::Item;
 
     fn decoder(&self) -> Self::Decoder {
-        SineDecoder::new()
+        SineDecoder::new(self.direction.clone())
     }
 }
-
-#[derive(Event)]
-struct SoundUpdateEvent(f32);
-
-#[derive(Resource)]
-struct EventSound(Events<SoundUpdateEvent>);
 
 #[derive(Resource)]
 struct AudioHandles {
     eduardo: Handle<SineAudio>,
+    direction_arcmut: Arc<Mutex<Vec3>>,
 }
 
 fn main() {
-    let mut events = Events::<SoundUpdateEvent>::default();
-
     App::new()
         .add_plugins(DefaultPlugins.set(AudioPlugin {
             global_volume: GlobalVolume::new(1.0),
         }))
         .add_audio_source::<SineAudio>()
         .add_plugins(SpatialAudioPlugin)
-        .add_event::<SoundUpdateEvent>()
         .add_systems(Startup, setup_listener)
         .add_systems(Startup, setup_sources)
         .add_systems(Update, change_freq)
         .insert_resource(AudioHandles {
             eduardo: Handle::default(),
+            direction_arcmut: Arc::default(),
         })
         .run();
 }
@@ -242,9 +241,13 @@ fn setup_sources(
     mut handles: ResMut<AudioHandles>,
     mut commands: Commands,
 ) {
-    let audio_handle = assets.add(SineAudio { decoder: None });
+    let some_val: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
+    let some_val_ = some_val.clone();
+
+    let audio_handle = assets.add(SineAudio { decoder: None, direction: some_val_ });
 
     handles.eduardo = audio_handle.clone();
+    handles.direction_arcmut = some_val.clone();
 
     commands.spawn(AudioSourceBundle {
         source: audio_handle,
@@ -259,9 +262,12 @@ fn change_freq(
 ) {
     if keyboard_input.just_pressed(KeyCode::A) {
         println!("Just pressed");
-        commands.spawn(AudioSourceBundle {
-            source: handles.eduardo.clone_weak(),
-            ..default()
-        });
+        // commands.spawn(AudioSourceBundle {
+        //     source: handles.eduardo.clone_weak(),
+        //     ..default()
+        // });
+        let binding = handles.direction_arcmut.clone();
+        let mut num = binding.lock().unwrap();
+        *num += 1.0;
     }
 }
