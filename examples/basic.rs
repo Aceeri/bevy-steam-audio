@@ -7,11 +7,22 @@ use bevy::prelude::*;
 use bevy_steam_audio::source::SineAudio;
 use bevy_steam_audio::source::SpatialAudioPlugin;
 
+use smooth_bevy_cameras::{
+    controllers::fps::{FpsCameraBundle, FpsCameraController, FpsCameraPlugin},
+    LookTransformPlugin,
+};
+
 #[derive(Resource)]
 struct AudioHandles {
     eduardo: Handle<SineAudio>,
     direction_arcmut: Arc<Mutex<Vec3>>,
 }
+
+#[derive(Component)]
+struct ListenerSteam;
+
+#[derive(Component)]
+struct SourceSteam;
 
 fn main() {
     App::new()
@@ -20,24 +31,16 @@ fn main() {
         }))
         .add_audio_source::<SineAudio>()
         .add_plugins(SpatialAudioPlugin)
-        .add_systems(Startup, setup_listener)
+        .add_plugins(LookTransformPlugin)
+        .add_plugins(FpsCameraPlugin::default())
         .add_systems(Startup, setup_sources)
-        .add_systems(Update, change_freq)
+        .add_systems(Startup, setup_scene)
+        .add_systems(Update, (update_sound_dir, play_new_sound))
         .insert_resource(AudioHandles {
             eduardo: Handle::default(),
             direction_arcmut: Arc::default(),
         })
         .run();
-}
-
-fn setup_listener(mut commands: Commands) {
-    let listener = commands
-        .spawn(SpatialBundle::default())
-        //.insert(Listener)
-        .insert(Name::new("listener"))
-        .insert(GlobalTransform::default())
-        .insert(Transform::default())
-        .id();
 }
 
 fn setup_sources(
@@ -48,7 +51,10 @@ fn setup_sources(
     let some_val: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
     let some_val_ = some_val.clone();
 
-    let audio_handle = assets.add(SineAudio { decoder: None, direction: some_val_ });
+    let audio_handle = assets.add(SineAudio {
+        decoder: None,
+        direction: some_val_,
+    });
 
     handles.eduardo = audio_handle.clone();
     handles.direction_arcmut = some_val.clone();
@@ -59,19 +65,70 @@ fn setup_sources(
     });
 }
 
-fn change_freq(
+fn play_new_sound(
     keyboard_input: Res<Input<KeyCode>>,
     handles: Res<AudioHandles>,
     mut commands: Commands,
 ) {
-    if keyboard_input.just_pressed(KeyCode::A) {
-        println!("Just pressed");
-        // commands.spawn(AudioSourceBundle {
-        //     source: handles.eduardo.clone_weak(),
-        //     ..default()
-        // });
-        let binding = handles.direction_arcmut.clone();
-        let mut num = binding.lock().unwrap();
-        *num += 1.0;
+    if keyboard_input.just_pressed(KeyCode::F) {
+        commands.spawn(AudioSourceBundle {
+            source: handles.eduardo.clone_weak(),
+            ..default()
+        });
     }
+}
+
+fn update_sound_dir(
+    handles: Res<AudioHandles>,
+    listener_query: Query<&GlobalTransform, With<ListenerSteam>>,
+) {
+    let source_transform = GlobalTransform::default();
+
+    let listener_transform = listener_query.get_single().unwrap();
+    //let direction = Vec3::ZERO - listener_transform;
+    let local_transform = source_transform.reparented_to(listener_transform);
+
+    let binding = handles.direction_arcmut.clone();
+    let mut num = binding.lock().unwrap();
+    *num = local_transform.translation.normalize_or_zero();
+}
+
+fn setup_scene(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    // plane
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(shape::Plane::from_size(5.0).into()),
+        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
+        ..default()
+    });
+    // cube
+    commands.spawn(PbrBundle {
+        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
+        material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(0.2)),
+        ..default()
+    });
+    // light
+    commands.spawn(PointLightBundle {
+        point_light: PointLight {
+            intensity: 1500.0,
+            shadows_enabled: true,
+            ..default()
+        },
+        transform: Transform::from_xyz(4.0, 8.0, 4.0),
+        ..default()
+    });
+    // camera
+    commands
+        .spawn(Camera3dBundle::default())
+        .insert(ListenerSteam)
+        .insert(FpsCameraBundle::new(
+            FpsCameraController::default(),
+            Vec3::new(-2.0, 5.0, 5.0),
+            Vec3::new(0., 0., 0.),
+            Vec3::Y,
+        ));
 }

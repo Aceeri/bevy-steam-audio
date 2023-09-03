@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex};
 use bevy::reflect::{TypePath, TypeUuid};
+use std::sync::{Arc, Mutex};
 
 use bevy::audio::Source;
 use bevy::utils::Duration;
@@ -66,12 +66,7 @@ impl SineDecoder {
         let mut binaural_params = BinauralParams::default();
         binaural_params.interpolation = HRTFInterpolation::Bilinear;
 
-        let binaural_effect = BinauralEffect::new(
-            &context,
-            &audio_settings,
-            &hrtf,
-        )
-        .unwrap();
+        let binaural_effect = BinauralEffect::new(&context, &audio_settings, &hrtf).unwrap();
 
         // standard sample rate for most recordings
         let sample_rate = 44_100;
@@ -105,7 +100,7 @@ impl Iterator for SineDecoder {
 
     fn next(&mut self) -> Option<Self::Item> {
         use glam::Vec3;
-        
+
         loop {
             // todo: len() can be determined at creation
             if self.current_block_offset < self.current_block1.len() as u32 {
@@ -135,8 +130,6 @@ impl Iterator for SineDecoder {
                 self.settings.audio_settings.sampling_rate(),
             );
 
-            //input_buffer.push_source(&mut self.decoder); // TODO: Do we need this?? It was done once in the original example
-
             // move the stuff below to the struct?
             let mut output_buffer = DeinterleavedFrame::new(
                 self.settings.audio_settings.frame_size() as usize,
@@ -146,12 +139,9 @@ impl Iterator for SineDecoder {
 
             // todo: len() can be determined at creation
             if input_buffer.push_source(&mut self.decoder) {
-                let dist = self.direction.lock().unwrap();
-                //println!("DistANCE: {}", *dist);
-                let time =
-                    (self.blocks_played as f32 / self.current_block1.len() as f32) * std::f32::consts::TAU * 15.0;
+                let dir = self.direction.lock().unwrap();
 
-                self.binaural_params.direction = Vec3::new(time.cos(), 0.0, time.sin());
+                self.binaural_params.direction = Vec3::new(dir.x, dir.y, dir.z);
 
                 self.binaural_effect
                     .apply_to_buffer(&self.binaural_params, &mut input_buffer, &mut output_buffer)
@@ -289,9 +279,9 @@ pub struct Listener;
 
 pub fn listener_update(
     audio_resource: Res<SpatialAudioSettings>,
-    query: Query<(&GlobalTransform, &Listener)>,
+    query: Query<&GlobalTransform, With<Listener>>,
 ) {
-    for (transform, listener_component) in query.iter() {
+    for transform in query.iter() {
         let flags = SimulationFlags::all();
         let orientation = Orientation {
             origin: glam_vec(transform.translation()),
