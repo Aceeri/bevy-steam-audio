@@ -22,7 +22,7 @@ use bevy::{
 // This allows the type to be registered as an asset.
 #[derive(TypePath, TypeUuid)]
 #[uuid = "c2090c23-78fd-44f1-8508-c89b1f3cec29"]
-pub struct SineAudio {
+pub struct SteamAudio {
     // Reference to data // not using atm
     pub decoder: Option<f32>,
     pub direction: Arc<Mutex<Vec3>>,
@@ -30,7 +30,7 @@ pub struct SineAudio {
 
 // This decoder is responsible for playing the audio,
 // and so stores data about the audio being played.
-pub struct SineDecoder {
+pub struct SteamDecoder {
     // Reader
     decoder: rodio::Decoder<std::fs::File>,
     sample_rate: u32,
@@ -45,7 +45,7 @@ pub struct SineDecoder {
     direction: Arc<Mutex<Vec3>>,
 }
 
-impl SineDecoder {
+impl SteamDecoder {
     // new(mut data)
     fn new(direction: Arc<Mutex<Vec3>>) -> Self {
         // Create reader
@@ -70,7 +70,7 @@ impl SineDecoder {
 
         // standard sample rate for most recordings
         let sample_rate = 44_100;
-        SineDecoder {
+        SteamDecoder {
             decoder: dec,
             sample_rate,
             current_channel: true,
@@ -95,7 +95,7 @@ impl SineDecoder {
 }
 
 // The decoder must implement iterator so that it can implement `Decodable`.
-impl Iterator for SineDecoder {
+impl Iterator for SteamDecoder {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -159,7 +159,7 @@ impl Iterator for SineDecoder {
 
 // `Source` is what allows the audio source to be played by bevy.
 // This trait provides information on the audio.
-impl Source for SineDecoder {
+impl Source for SteamDecoder {
     fn current_frame_len(&self) -> Option<usize> {
         None
     }
@@ -178,13 +178,13 @@ impl Source for SineDecoder {
 }
 
 // Finally `Decodable` can be implemented for our `SineAudio`.
-impl Decodable for SineAudio {
-    type Decoder = SineDecoder;
+impl Decodable for SteamAudio {
+    type Decoder = SteamDecoder;
 
-    type DecoderItem = <SineDecoder as Iterator>::Item;
+    type DecoderItem = <SteamDecoder as Iterator>::Item;
 
     fn decoder(&self) -> Self::Decoder {
-        SineDecoder::new(self.direction.clone())
+        SteamDecoder::new(self.direction.clone())
     }
 }
 

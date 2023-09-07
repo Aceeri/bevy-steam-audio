@@ -8,7 +8,7 @@ use bevy::audio::AddAudioSource;
 use bevy::audio::AudioPlugin;
 
 use bevy::prelude::*;
-use bevy_steam_audio::source::SineAudio;
+use bevy_steam_audio::source::SteamAudio;
 use bevy_steam_audio::source::SpatialAudioPlugin;
 
 use smooth_bevy_cameras::{
@@ -18,7 +18,7 @@ use smooth_bevy_cameras::{
 
 #[derive(Resource)]
 struct AudioHandles {
-    eduardo: Handle<SineAudio>,
+    eduardo: Handle<SteamAudio>,
     direction_arcmut: Arc<Mutex<Vec3>>,
 }
 
@@ -30,7 +30,7 @@ fn main() {
         .add_plugins(DefaultPlugins.set(AudioPlugin {
             global_volume: GlobalVolume::new(1.0),
         }))
-        .add_audio_source::<SineAudio>()
+        .add_audio_source::<SteamAudio>()
         .add_plugins(SpatialAudioPlugin)
         .add_plugins(LookTransformPlugin)
         .add_plugins(FpsCameraPlugin::default())
@@ -45,14 +45,14 @@ fn main() {
 }
 
 fn setup_sources(
-    mut assets: ResMut<Assets<SineAudio>>,
+    mut assets: ResMut<Assets<SteamAudio>>,
     mut handles: ResMut<AudioHandles>,
     mut commands: Commands,
 ) {
     let source_direction: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
     let source_direction_ = source_direction.clone();
 
-    let audio_handle = assets.add(SineAudio {
+    let audio_handle = assets.add(SteamAudio {
         decoder: None,
         direction: source_direction_,
     });
