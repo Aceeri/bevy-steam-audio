@@ -1,3 +1,7 @@
+/// This example creates a scene with a camera (the listener) and a sound source in the middle.
+/// The sound is spatialized with the Steam Audio HRTF
+/// Fly around with W,A,S,D,Shift,Space and the mouse
+/// Press F to start the sound again
 use std::sync::{Arc, Mutex};
 
 use bevy::audio::AddAudioSource;
@@ -21,9 +25,6 @@ struct AudioHandles {
 #[derive(Component)]
 struct ListenerSteam;
 
-#[derive(Component)]
-struct SourceSteam;
-
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(AudioPlugin {
@@ -35,7 +36,7 @@ fn main() {
         .add_plugins(FpsCameraPlugin::default())
         .add_systems(Startup, setup_sources)
         .add_systems(Startup, setup_scene)
-        .add_systems(Update, (update_sound_dir, play_new_sound))
+        .add_systems(Update, (update_sound_direction, play_new_sound))
         .insert_resource(AudioHandles {
             eduardo: Handle::default(),
             direction_arcmut: Arc::default(),
@@ -48,16 +49,16 @@ fn setup_sources(
     mut handles: ResMut<AudioHandles>,
     mut commands: Commands,
 ) {
-    let some_val: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
-    let some_val_ = some_val.clone();
+    let source_direction: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
+    let source_direction_ = source_direction.clone();
 
     let audio_handle = assets.add(SineAudio {
         decoder: None,
-        direction: some_val_,
+        direction: source_direction_,
     });
 
     handles.eduardo = audio_handle.clone();
-    handles.direction_arcmut = some_val.clone();
+    handles.direction_arcmut = source_direction.clone();
 
     commands.spawn(AudioSourceBundle {
         source: audio_handle,
@@ -78,18 +79,18 @@ fn play_new_sound(
     }
 }
 
-fn update_sound_dir(
+fn update_sound_direction(
     handles: Res<AudioHandles>,
     listener_query: Query<&GlobalTransform, With<ListenerSteam>>,
 ) {
     let source_transform = GlobalTransform::default();
 
     let listener_transform = listener_query.get_single().unwrap();
-    //let direction = Vec3::ZERO - listener_transform;
     let local_transform = source_transform.reparented_to(listener_transform);
 
     let binding = handles.direction_arcmut.clone();
     let mut num = binding.lock().unwrap();
+
     *num = local_transform.translation.normalize_or_zero();
 }
 
