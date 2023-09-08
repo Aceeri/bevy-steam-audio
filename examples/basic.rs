@@ -19,7 +19,6 @@ use smooth_bevy_cameras::{
 #[derive(Resource)]
 struct AudioHandles {
     eduardo: Handle<SteamAudio>,
-    direction_arcmut: Arc<Mutex<Vec3>>,
 }
 
 #[derive(Component)]
@@ -39,7 +38,6 @@ fn main() {
         .add_systems(Update, (update_sound_direction, play_new_sound))
         .insert_resource(AudioHandles {
             eduardo: Handle::default(),
-            direction_arcmut: Arc::default(),
         })
         .run();
 }
@@ -58,7 +56,6 @@ fn setup_sources(
     });
 
     handles.eduardo = audio_handle.clone();
-    handles.direction_arcmut = source_direction.clone();
 
     commands.spawn(AudioSourceBundle {
         source: audio_handle,
@@ -81,6 +78,7 @@ fn play_new_sound(
 
 fn update_sound_direction(
     handles: Res<AudioHandles>,
+    assets: Res<Assets<SteamAudio>>,
     listener_query: Query<&GlobalTransform, With<ListenerSteam>>,
 ) {
     let source_transform = GlobalTransform::default();
@@ -88,7 +86,9 @@ fn update_sound_direction(
     let listener_transform = listener_query.get_single().unwrap();
     let local_transform = source_transform.reparented_to(listener_transform);
 
-    let binding = handles.direction_arcmut.clone();
+    let handle = assets.get(&handles.eduardo).unwrap();
+
+    let binding = handle.direction.clone();
     let mut num = binding.lock().unwrap();
 
     *num = local_transform.translation.normalize_or_zero();
