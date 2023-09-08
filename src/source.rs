@@ -14,8 +14,6 @@ use bevy::{
     },
 };
 
-//use glam::Vec3;
-
 // This struct usually contains the data for the audio being played.
 // This is where data read from an audio file would be stored, for example.
 // Implementing `TypeUuid` will automatically implement `Asset`.
@@ -23,8 +21,7 @@ use bevy::{
 #[derive(TypePath, TypeUuid)]
 #[uuid = "c2090c23-78fd-44f1-8508-c89b1f3cec29"]
 pub struct SteamAudio {
-    // Reference to data // not using atm
-    pub decoder: Option<f32>,
+    pub path: String,
     pub direction: Arc<Mutex<Vec3>>,
 }
 
@@ -46,10 +43,9 @@ pub struct SteamDecoder {
 }
 
 impl SteamDecoder {
-    // new(mut data)
-    fn new(direction: Arc<Mutex<Vec3>>) -> Self {
+    fn new(direction: Arc<Mutex<Vec3>>, path: String) -> Self {
         // Create reader
-        let file = std::fs::File::open("assets/eduardo.ogg").unwrap();
+        let file = std::fs::File::open(path).unwrap();
         let dec = rodio::Decoder::new(file).unwrap();
 
         let audio_settings = AudioSettings::default();
@@ -105,9 +101,6 @@ impl Iterator for SteamDecoder {
             // todo: len() can be determined at creation
             if self.current_block_offset < self.current_block1.len() as u32 {
                 // Read from the current block
-                // let raw_val = self.current_block1[self.current_block_offset as usize];
-                // self.current_block_offset += 1;
-                // return Some(raw_val);
                 let raw_val: f32;
 
                 if self.current_channel {
@@ -177,14 +170,13 @@ impl Source for SteamDecoder {
     }
 }
 
-// Finally `Decodable` can be implemented for our `SineAudio`.
 impl Decodable for SteamAudio {
     type Decoder = SteamDecoder;
 
     type DecoderItem = <SteamDecoder as Iterator>::Item;
 
     fn decoder(&self) -> Self::Decoder {
-        SteamDecoder::new(self.direction.clone())
+        SteamDecoder::new(self.direction.clone(), self.path.clone())
     }
 }
 

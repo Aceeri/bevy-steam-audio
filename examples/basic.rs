@@ -8,8 +8,8 @@ use bevy::audio::AddAudioSource;
 use bevy::audio::AudioPlugin;
 
 use bevy::prelude::*;
-use bevy_steam_audio::source::SteamAudio;
 use bevy_steam_audio::source::SpatialAudioPlugin;
+use bevy_steam_audio::source::SteamAudio;
 
 use smooth_bevy_cameras::{
     controllers::fps::{FpsCameraBundle, FpsCameraController, FpsCameraPlugin},
@@ -53,7 +53,7 @@ fn setup_sources(
     let source_direction_ = source_direction.clone();
 
     let audio_handle = assets.add(SteamAudio {
-        decoder: None,
+        path: "assets/eduardo.ogg".to_owned(),
         direction: source_direction_,
     });
 
