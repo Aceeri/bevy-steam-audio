@@ -95,8 +95,6 @@ impl Iterator for SteamDecoder {
     type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
-        use glam::Vec3;
-
         loop {
             // todo: len() can be determined at creation
             if self.current_block_offset < self.current_block1.len() as u32 {
@@ -132,9 +130,9 @@ impl Iterator for SteamDecoder {
 
             // todo: len() can be determined at creation
             if input_buffer.push_source(&mut self.decoder) {
-                let dir = self.direction.lock().unwrap();
+                let dir: Vec3 = *self.direction.lock().unwrap();
 
-                self.binaural_params.direction = Vec3::new(dir.x, dir.y, dir.z);
+                self.binaural_params.direction = dir.into();
 
                 self.binaural_effect
                     .apply_to_buffer(&self.binaural_params, &mut input_buffer, &mut output_buffer)
@@ -261,11 +259,6 @@ impl Plugin for SpatialAudioPlugin {
 //     }
 // }
 
-// Todo: Need to get rid of this...
-fn glam_vec(input: bevy::prelude::Vec3) -> glam::Vec3 {
-    glam::Vec3::new(input.x, input.y, input.z)
-}
-
 #[derive(Component)]
 pub struct Listener;
 
@@ -276,10 +269,10 @@ pub fn listener_update(
     for transform in query.iter() {
         let flags = SimulationFlags::all();
         let orientation = Orientation {
-            origin: glam_vec(transform.translation()),
-            right: glam_vec(transform.right()),
-            up: glam_vec(transform.up()),
-            ahead: glam_vec(transform.forward()),
+            origin: transform.translation().into(),
+            right: transform.right().into(),
+            up: transform.up().into(),
+            ahead: transform.forward().into(),
         };
 
         let shared_inputs = SimulationSharedInputs {
