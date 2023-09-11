@@ -1,3 +1,9 @@
+use bevy::reflect::{TypePath, TypeUuid};
+use std::sync::{Arc, Mutex};
+
+use bevy::audio::Source;
+use bevy::utils::Duration;
+
 use steam_audio::{prelude::*, Orientation};
 
 use bevy::{
@@ -8,9 +14,180 @@ use bevy::{
     },
 };
 
-#[derive(Component, Debug)]
-pub struct SpatialAudioSource {
-    pub settings: SourceSettings,
+// This struct usually contains the data for the audio being played.
+// This is where data read from an audio file would be stored, for example.
+// Implementing `TypeUuid` will automatically implement `Asset`.
+// This allows the type to be registered as an asset.
+#[derive(TypePath, TypeUuid)]
+#[uuid = "c2090c23-78fd-44f1-8508-c89b1f3cec29"]
+pub struct SteamAudio {
+    pub path: String,
+    pub direction: Arc<Mutex<Vec3>>,
+}
+
+// This decoder is responsible for playing the audio,
+// and so stores data about the audio being played.
+pub struct SteamDecoder {
+    // Reader
+    decoder: rodio::Decoder<std::fs::File>,
+    sample_rate: u32,
+    current_channel: bool,
+    current_block_offset: u32,
+    current_block1: Vec<f32>,
+    current_block2: Vec<f32>,
+    binaural_params: BinauralParams,
+    binaural_effect: BinauralEffect,
+    settings: SpatialAudioSettings,
+    blocks_played: u32,
+    direction: Arc<Mutex<Vec3>>,
+}
+
+impl SteamDecoder {
+    fn new(direction: Arc<Mutex<Vec3>>, path: String) -> Self {
+        // Create reader
+        let file = std::fs::File::open(path).unwrap();
+        let dec = rodio::Decoder::new(file).unwrap();
+
+        let audio_settings = AudioSettings::default();
+        let context_settings = ContextSettings::default();
+        let hrtf_settings = HRTFSettings::default();
+        let simulation_settings = SimulationSettings::from_audio_settings(&audio_settings);
+
+        let context = Context::new(&context_settings).expect("could not build steam audio context");
+        let hrtf = HRTF::new(&context, &audio_settings, &hrtf_settings)
+            .expect("could not build steam audio hrtf");
+        let simulator = Simulator::new(&context, &simulation_settings)
+            .expect("could not build steam audio simulation");
+
+        let mut binaural_params = BinauralParams::default();
+        binaural_params.interpolation = HRTFInterpolation::Bilinear;
+
+        let binaural_effect = BinauralEffect::new(&context, &audio_settings, &hrtf).unwrap();
+
+        // standard sample rate for most recordings
+        let sample_rate = 44_100;
+        SteamDecoder {
+            decoder: dec,
+            sample_rate,
+            current_channel: true,
+            current_block_offset: 0,
+            current_block1: Vec::new(),
+            current_block2: Vec::new(),
+            binaural_params,
+            binaural_effect,
+            settings: SpatialAudioSettings {
+                audio_settings,
+                context_settings,
+                hrtf_settings,
+                simulation_settings,
+                context,
+                hrtf,
+                simulator,
+            },
+            blocks_played: 0,
+            direction,
+        }
+    }
+}
+
+// The decoder must implement iterator so that it can implement `Decodable`.
+impl Iterator for SteamDecoder {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            // todo: len() can be determined at creation
+            if self.current_block_offset < self.current_block1.len() as u32 {
+                // Read from the current block
+                let raw_val: f32;
+
+                if self.current_channel {
+                    raw_val = self.current_block1[self.current_block_offset as usize];
+                } else {
+                    raw_val = self.current_block2[self.current_block_offset as usize];
+                    self.current_block_offset += 1;
+                }
+
+                self.current_channel = !self.current_channel;
+                return Some(raw_val);
+            }
+
+            // Load the next block
+            self.current_block_offset = 0;
+
+            let mut input_buffer = DeinterleavedFrame::new(
+                self.settings.audio_settings.frame_size() as usize,
+                1,
+                self.settings.audio_settings.sampling_rate(),
+            );
+
+            // move the stuff below to the struct?
+            let mut output_buffer = DeinterleavedFrame::new(
+                self.settings.audio_settings.frame_size() as usize,
+                2,
+                self.settings.audio_settings.sampling_rate(),
+            );
+
+            // todo: len() can be determined at creation
+            if input_buffer.push_source(&mut self.decoder) {
+                let dir: Vec3 = *self.direction.lock().unwrap();
+
+                self.binaural_params.direction = dir.into();
+
+                self.binaural_effect
+                    .apply_to_buffer(&self.binaural_params, &mut input_buffer, &mut output_buffer)
+                    .unwrap();
+
+                self.current_block1 = output_buffer.current_frame[0].clone();
+                self.current_block2 = output_buffer.current_frame[1].clone();
+                self.blocks_played += 1;
+            } else {
+                return None;
+            }
+        }
+    }
+}
+
+// `Source` is what allows the audio source to be played by bevy.
+// This trait provides information on the audio.
+impl Source for SteamDecoder {
+    fn current_frame_len(&self) -> Option<usize> {
+        None
+    }
+
+    fn channels(&self) -> u16 {
+        2
+    }
+
+    fn sample_rate(&self) -> u32 {
+        self.sample_rate
+    }
+
+    fn total_duration(&self) -> Option<Duration> {
+        None
+    }
+}
+
+impl Decodable for SteamAudio {
+    type Decoder = SteamDecoder;
+
+    type DecoderItem = <SteamDecoder as Iterator>::Item;
+
+    fn decoder(&self) -> Self::Decoder {
+        SteamDecoder::new(self.direction.clone(), self.path.clone())
+    }
+}
+
+// Todo implement default
+#[derive(Resource)]
+pub struct SpatialAudioSettings {
+    pub audio_settings: AudioSettings,
+    pub context_settings: ContextSettings,
+    pub hrtf_settings: HRTFSettings,
+    pub simulation_settings: SimulationSettings,
+    pub context: Context,
+    pub hrtf: HRTF,
+    pub simulator: Simulator,
 }
 
 pub struct SpatialAudioPlugin;
@@ -23,89 +200,89 @@ impl Plugin for SpatialAudioPlugin {
         let simulation_settings = SimulationSettings::from_audio_settings(&audio_settings);
 
         let context = Context::new(&context_settings).expect("could not build steam audio context");
-        let hrtf = HRTF::new(&context, &audio_settings, &hrtf_settings).expect("could not build steam audio hrtf");
-        let simulator = Simulator::new(&context, &simulation_settings).expect("could not build steam audio simulation");
+        let hrtf = HRTF::new(&context, &audio_settings, &hrtf_settings)
+            .expect("could not build steam audio hrtf");
+        let simulator = Simulator::new(&context, &simulation_settings)
+            .expect("could not build steam audio simulation");
 
-        app
-            .insert_resource(audio_settings)
-            .insert_resource(context_settings)
-            .insert_resource(hrtf_settings)
-            .insert_resource(simulation_settings)
-            .insert_resource(context)
-            .insert_resource(hrtf)
-            .insert_resource(simulator);
+        app.insert_resource(SpatialAudioSettings {
+            audio_settings,
+            context_settings,
+            hrtf_settings,
+            simulation_settings,
+            context,
+            hrtf,
+            simulator,
+        });
     }
 }
 
-pub fn context_update(mut commands: Commands, settings: Res<ContextSettings>) {
-    if settings.is_changed() {
-        match Context::new(&*settings) {
-            Ok(context) => {
-                commands.insert_resource(context);
-            }
-            _ => {}
-        }
-    }
-}
+// pub fn context_update(mut commands: Commands, settings: Res<ContextSettings>) {
+//     if settings.is_changed() {
+//         match Context::new(&*settings) {
+//             Ok(context) => {
+//                 commands.insert_resource(context);
+//             }
+//             _ => {}
+//         }
+//     }
+// }
 
-pub fn hrtf_update(
-    mut commands: Commands,
-    context: Res<Context>,
-    audio_settings: Res<AudioSettings>,
-    hrtf_settings: Res<HRTFSettings>,
-) {
-    if context.is_changed() || audio_settings.is_changed() || hrtf_settings.is_changed() {
-        match HRTF::new(&context, &audio_settings, &hrtf_settings) {
-            Ok(hrtf) => {
-                commands.insert_resource(hrtf);
-            }
-            _ => {}
-        };
-    }
-}
+// pub fn hrtf_update(
+//     mut commands: Commands,
+//     context: Res<Context>,
+//     audio_settings: Res<AudioSettings>,
+//     hrtf_settings: Res<HRTFSettings>,
+// ) {
+//     if context.is_changed() || audio_settings.is_changed() || hrtf_settings.is_changed() {
+//         match HRTF::new(&context, &audio_settings, &hrtf_settings) {
+//             Ok(hrtf) => {
+//                 commands.insert_resource(hrtf);
+//             }
+//             _ => {}
+//         };
+//     }
+// }
 
-pub fn simulation_update(
-    mut commands: Commands,
-    context: Res<Context>,
-    simulation_settings: Res<SimulationSettings>,
-) {
-    if context.is_changed() || simulation_settings.is_changed() {
-        match Simulator::new(&*context, &simulation_settings) {
-            Ok(simulator) => {
-                commands.insert_resource(simulator);
-            }
-            _ => {}
-        }
-    }
-}
+// pub fn simulation_update(
+//     mut commands: Commands,
+//     context: Res<Context>,
+//     simulation_settings: Res<SimulationSettings>,
+// ) {
+//     if context.is_changed() || simulation_settings.is_changed() {
+//         match Simulator::new(&*context, &simulation_settings) {
+//             Ok(simulator) => {
+//                 commands.insert_resource(simulator);
+//             }
+//             _ => {}
+//         }
+//     }
+// }
 
-pub struct Listener(pub Entity);
+#[derive(Component)]
+pub struct Listener;
 
 pub fn listener_update(
-    simulator: Res<Simulator>,
-    listener: Option<Res<Listener>>,
-    query: Query<&GlobalTransform>,
+    audio_resource: Res<SpatialAudioSettings>,
+    query: Query<&GlobalTransform, With<Listener>>,
 ) {
-    if let Some(listener) = listener {
-        match query.get(listener.0) {
-            Ok(global) => {
-                let flags = SimulationFlags::all();
-                let orientation = Orientation {
-                    origin: global.translation,
-                    right: global.right(),
-                    up: global.up(),
-                    ahead: global.forward(),
-                };
+    for transform in query.iter() {
+        let flags = SimulationFlags::all();
+        let orientation = Orientation {
+            origin: transform.translation().into(),
+            right: transform.right().into(),
+            up: transform.up().into(),
+            ahead: transform.forward().into(),
+        };
 
-                let shared_inputs = SimulationSharedInputs {
-                    listener: orientation,
-                    ..Default::default()
-                };
+        let shared_inputs = SimulationSharedInputs {
+            listener: orientation,
+            ..Default::default()
+        };
 
-                simulator.set_shared_inputs(flags, &shared_inputs);
-            }
-            _ => {}
-        }
+        audio_resource
+            .simulator
+            .set_shared_inputs(flags, &shared_inputs);
     }
 }
 
