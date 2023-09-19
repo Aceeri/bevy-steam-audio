@@ -50,9 +50,17 @@ fn setup_sources(
     let source_direction: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
     let source_direction_ = source_direction.clone();
 
+    let source_position: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
+    let source_position_ = source_position.clone();
+
+    let listener_position: Arc<Mutex<Vec3>> = Arc::new(Mutex::new(Vec3::default()));
+    let listener_position_ = listener_position.clone();
+
     let audio_handle = assets.add(SteamAudio {
         path: "assets/eduardo.ogg".to_owned(),
         direction: source_direction_,
+        source_position: source_position_,
+        listener_position: listener_position_,
     });
 
     handles.eduardo = audio_handle.clone();
@@ -81,17 +89,23 @@ fn update_sound_direction(
     assets: Res<Assets<SteamAudio>>,
     listener_query: Query<&GlobalTransform, With<ListenerSteam>>,
 ) {
-    let source_transform = GlobalTransform::default();
-
+    let source_transform = GlobalTransform::default(); // Todo
     let listener_transform = listener_query.get_single().unwrap();
     let local_transform = source_transform.reparented_to(listener_transform);
 
     let handle = assets.get(&handles.eduardo).unwrap();
 
     let binding = handle.direction.clone();
-    let mut num = binding.lock().unwrap();
+    let mut direction = binding.lock().unwrap();
+    *direction = local_transform.translation.normalize_or_zero();
 
-    *num = local_transform.translation.normalize_or_zero();
+    let binding = handle.source_position.clone();
+    let mut source_position = binding.lock().unwrap();
+    *source_position = source_transform.translation();
+
+    let binding = handle.listener_position.clone();
+    let mut listener_position = binding.lock().unwrap();
+    *listener_position = listener_transform.translation();
 }
 
 fn setup_scene(

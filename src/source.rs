@@ -4,7 +4,11 @@ use std::sync::{Arc, Mutex};
 use bevy::audio::Source;
 use bevy::utils::Duration;
 
-use steam_audio::{prelude::*, Orientation};
+use steam_audio::{
+    prelude::*,
+    simulation::source::{AirAbsorptionModel, Directivity},
+    Orientation,
+};
 
 use bevy::{
     prelude::*,
@@ -23,6 +27,8 @@ use bevy::{
 pub struct SteamAudio {
     pub path: String,
     pub direction: Arc<Mutex<Vec3>>,
+    pub source_position: Arc<Mutex<Vec3>>,
+    pub listener_position: Arc<Mutex<Vec3>>,
 }
 
 // This decoder is responsible for playing the audio,
@@ -37,13 +43,22 @@ pub struct SteamDecoder {
     current_block2: Vec<f32>,
     binaural_params: BinauralParams,
     binaural_effect: BinauralEffect,
+    direct_params: DirectEffectParams,
+    direct_effect: DirectEffect,
     settings: SpatialAudioSettings,
     blocks_played: u32,
     direction: Arc<Mutex<Vec3>>,
+    source_position: Arc<Mutex<Vec3>>,
+    listener_position: Arc<Mutex<Vec3>>,
 }
 
 impl SteamDecoder {
-    fn new(direction: Arc<Mutex<Vec3>>, path: String) -> Self {
+    fn new(
+        direction: Arc<Mutex<Vec3>>,
+        source_position: Arc<Mutex<Vec3>>,
+        listener_position: Arc<Mutex<Vec3>>,
+        path: String,
+    ) -> Self {
         // Create reader
         let file = std::fs::File::open(path).unwrap();
         let dec = rodio::Decoder::new(file).unwrap();
@@ -64,6 +79,12 @@ impl SteamDecoder {
 
         let binaural_effect = BinauralEffect::new(&context, &audio_settings, &hrtf).unwrap();
 
+        let mut direct_params = DirectEffectParams::default();
+        direct_params.flags = DirectEffectFlags::AIR_ABSORPTION
+            | DirectEffectFlags::DISTANCE_ATTENUATION
+            | DirectEffectFlags::DIRECTIVITY;
+        let direct_effect = DirectEffect::new(&context, &audio_settings, 1).unwrap();
+
         // standard sample rate for most recordings
         let sample_rate = 44_100;
         SteamDecoder {
@@ -75,6 +96,8 @@ impl SteamDecoder {
             current_block2: Vec::new(),
             binaural_params,
             binaural_effect,
+            direct_params,
+            direct_effect,
             settings: SpatialAudioSettings {
                 audio_settings,
                 context_settings,
@@ -86,6 +109,8 @@ impl SteamDecoder {
             },
             blocks_played: 0,
             direction,
+            source_position,
+            listener_position,
         }
     }
 }
@@ -121,6 +146,12 @@ impl Iterator for SteamDecoder {
                 self.settings.audio_settings.sampling_rate(),
             );
 
+            let mut intermediate_buffer = DeinterleavedFrame::new(
+                self.settings.audio_settings.frame_size() as usize,
+                1,
+                self.settings.audio_settings.sampling_rate(),
+            );
+
             // move the stuff below to the struct?
             let mut output_buffer = DeinterleavedFrame::new(
                 self.settings.audio_settings.frame_size() as usize,
@@ -131,11 +162,55 @@ impl Iterator for SteamDecoder {
             // todo: len() can be determined at creation
             if input_buffer.push_source(&mut self.decoder) {
                 let dir: Vec3 = *self.direction.lock().unwrap();
+                let source_pos: Vec3 = *self.source_position.lock().unwrap();
+                let listener_pos: Vec3 = *self.listener_position.lock().unwrap();
+
+                let attenuation_model = DistanceAttenuationModel::default();
+                let attenuation = attenuation_model.calculate(
+                    &self.settings.context,
+                    source_pos.into(),
+                    listener_pos.into(),
+                );
+
+                let absorption_model = AirAbsorptionModel::default();
+                let absorption = absorption_model.calculate(
+                    &self.settings.context,
+                    source_pos.into(),
+                    listener_pos.into(),
+                );
+
+                let directivity_model = Directivity {
+                    dipole_weight: 0.0,
+                    dipole_power: 1.0,
+                };
+                let directivity = directivity_model.calculate(
+                    &self.settings.context,
+                    Orientation {
+                        right: Vec3::X.into(),
+                        up: Vec3::Y.into(),
+                        ahead: Vec3::NEG_Z.into(),
+                        origin: Vec3::ZERO.into(),
+                    },
+                    listener_pos.into(),
+                );
+
+                self.direct_params.distance_attenuation = attenuation;
+                self.direct_params.air_absorption = absorption;
+                self.direct_params.directivity = directivity;
+
+                // todo: why is direct effect apply_to_buffer input not mut compared to binaural effect?
+                self.direct_effect
+                    .apply_to_buffer(&self.direct_params, input_buffer, &mut intermediate_buffer)
+                    .unwrap();
 
                 self.binaural_params.direction = dir.into();
 
                 self.binaural_effect
-                    .apply_to_buffer(&self.binaural_params, &mut input_buffer, &mut output_buffer)
+                    .apply_to_buffer(
+                        &self.binaural_params,
+                        &mut intermediate_buffer,
+                        &mut output_buffer,
+                    )
                     .unwrap();
 
                 self.current_block1 = output_buffer.current_frame[0].clone();
@@ -169,12 +244,17 @@ impl Source for SteamDecoder {
 }
 
 impl Decodable for SteamAudio {
-    type Decoder = SteamDecoder;
-
     type DecoderItem = <SteamDecoder as Iterator>::Item;
 
+    type Decoder = SteamDecoder;
+
     fn decoder(&self) -> Self::Decoder {
-        SteamDecoder::new(self.direction.clone(), self.path.clone())
+        SteamDecoder::new(
+            self.direction.clone(),
+            self.source_position.clone(),
+            self.listener_position.clone(),
+            self.path.clone(),
+        )
     }
 }
 
