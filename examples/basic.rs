@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use bevy::audio::AddAudioSource;
 use bevy::audio::AudioPlugin;
 
+use bevy::audio::SpatialScale;
 use bevy::prelude::*;
 use bevy_steam_audio::source::SpatialAudioPlugin;
 use bevy_steam_audio::source::SteamAudio;
@@ -28,6 +29,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(AudioPlugin {
             global_volume: GlobalVolume::new(1.0),
+            default_spatial_scale: SpatialScale::new(1.0),
         }))
         .add_audio_source::<SteamAudio>()
         .add_plugins(SpatialAudioPlugin)
@@ -65,22 +67,16 @@ fn setup_sources(
 
     handles.eduardo = audio_handle.clone();
 
-    commands.spawn(AudioSourceBundle {
-        source: audio_handle,
-        ..default()
-    });
+    commands.spawn(AudioPlayer(audio_handle));
 }
 
 fn play_new_sound(
-    keyboard_input: Res<Input<KeyCode>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
     handles: Res<AudioHandles>,
     mut commands: Commands,
 ) {
-    if keyboard_input.just_pressed(KeyCode::F) {
-        commands.spawn(AudioSourceBundle {
-            source: handles.eduardo.clone_weak(),
-            ..default()
-        });
+    if keyboard_input.just_pressed(KeyCode::KeyF) {
+        commands.spawn(AudioPlayer(handles.eduardo.clone_weak()));
     }
 }
 
@@ -114,31 +110,28 @@ fn setup_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     // plane
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(shape::Plane::from_size(5.0).into()),
-        material: materials.add(Color::rgb(0.3, 0.5, 0.3).into()),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Plane3d::default().mesh().size(5.0, 5.0))),
+        MeshMaterial3d(materials.add(Color::srgb(0.3, 0.5, 0.3))),
+    ));
     // cube
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Mesh::from(shape::Cube { size: 1.0 })),
-        material: materials.add(Color::rgb(0.8, 0.7, 0.6).into()),
-        transform: Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(0.2)),
-        ..default()
-    });
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
+        MeshMaterial3d(materials.add(Color::srgb(0.8, 0.7, 0.6))),
+        Transform::from_xyz(0.0, 0.0, 0.0).with_scale(Vec3::splat(0.2)),
+    ));
     // light
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 1500.0,
             shadows_enabled: true,
             ..default()
         },
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        ..default()
-    });
+        Transform::from_xyz(4.0, 8.0, 4.0),
+    ));
     // camera
     commands
-        .spawn(Camera3dBundle::default())
+        .spawn(Camera3d::default())
         .insert(ListenerSteam)
         .insert(FpsCameraBundle::new(
             FpsCameraController::default(),

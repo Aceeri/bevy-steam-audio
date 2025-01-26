@@ -1,29 +1,37 @@
-use bevy::reflect::{TypePath, TypeUuid};
+use bevy::{
+    app::{App, Plugin},
+    asset::Asset,
+    audio::Decodable,
+    math::{Dir3, Vec3},
+    prelude::{Component, GlobalTransform, Mesh, Query, Res, Resource, With},
+    reflect::TypePath,
+};
 use std::sync::{Arc, Mutex};
 
 use bevy::audio::Source;
 use bevy::utils::Duration;
 
 use steam_audio::{
-    prelude::*,
+    hrtf::{AudioSettings, HRTFInterpolation, HRTFSettings, HRTF},
+    prelude::{
+        BinauralEffect, BinauralParams, Context, ContextSettings, DeinterleavedFrame, DirectEffect,
+        DirectEffectFlags, DirectEffectParams, DistanceAttenuationModel, SimulationFlags,
+        SimulationSettings, SimulationSharedInputs, Simulator,
+    },
     simulation::source::{AirAbsorptionModel, Directivity},
     Orientation,
 };
 
-use bevy::{
-    prelude::*,
-    render::{
-        mesh::{Indices, VertexAttributeValues},
-        render_resource::PrimitiveTopology,
-    },
+use bevy::render::{
+    mesh::{Indices, VertexAttributeValues},
+    render_resource::PrimitiveTopology,
 };
 
 // This struct usually contains the data for the audio being played.
 // This is where data read from an audio file would be stored, for example.
-// Implementing `TypeUuid` will automatically implement `Asset`.
+// Implementing `TypePath` will automatically implement `Asset`.
 // This allows the type to be registered as an asset.
-#[derive(TypePath, TypeUuid)]
-#[uuid = "c2090c23-78fd-44f1-8508-c89b1f3cec29"]
+#[derive(TypePath, Asset)]
 pub struct SteamAudio {
     pub path: String,
     pub direction: Arc<Mutex<Vec3>>,
@@ -350,9 +358,9 @@ pub fn listener_update(
         let flags = SimulationFlags::all();
         let orientation = Orientation {
             origin: transform.translation().into(),
-            right: transform.right().into(),
-            up: transform.up().into(),
-            ahead: transform.forward().into(),
+            right: transform.right().as_array(),
+            up: transform.up().as_array(),
+            ahead: transform.forward().to_array(),
         };
 
         let shared_inputs = SimulationSharedInputs {
@@ -435,5 +443,15 @@ impl TryFrom<Mesh> for AudioMesh {
             materials: materials,
             material_indices: material_indices,
         })
+    }
+}
+
+trait AsArray<const N: usize> {
+    fn as_array(self) -> [f32; N];
+}
+
+impl AsArray<3> for Dir3 {
+    fn as_array(self) -> [f32; 3] {
+        [self.x, self.y, self.z]
     }
 }
